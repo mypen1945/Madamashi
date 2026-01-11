@@ -4,13 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Madamashi</title>
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="Madamashi">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="theme-color" content="#ffffff">
-
     <style>
+        /* --- 既存スタイルは維持 --- */
         :root {
             --bg-color: #ffffff;
             --border-color: #eff3f4;
@@ -75,20 +70,20 @@
                 box-shadow: 0 0 0 1px var(--accent-color);
             }
 
+        /* 検索バー下のレイアウト */
         .header-bottom-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0 4px;
         }
 
+        /* ログアウトボタン：目立たない薄い文字 */
         .logout-btn {
             font-size: 12px;
             color: var(--text-secondary);
             cursor: pointer;
             opacity: 0.6;
             transition: 0.2s;
-            user-select: none;
         }
 
             .logout-btn:hover {
@@ -136,8 +131,14 @@
             font-weight: bold;
             cursor: pointer;
             font-size: 18px;
+            transition: 0.2s;
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
+
+            button.login-btn:hover {
+                background-color: #1a8cd8;
+                transform: translateY(-1px);
+            }
 
         .loading {
             text-align: center;
@@ -146,6 +147,7 @@
             display: flex;
             flex-direction: column;
             align-items: center;
+            justify-content: center;
             font-size: 14px;
         }
 
@@ -165,7 +167,7 @@
             }
 
             100% {
-                transform: rotate(360deg);
+                transform: rotate(3600deg);
             }
         }
 
@@ -174,6 +176,7 @@
             border-bottom: 1px solid var(--border-color);
             display: flex;
             gap: 10px;
+            transition: background-color 0.2s;
             cursor: pointer;
         }
 
@@ -181,17 +184,22 @@
                 background-color: var(--hover-bg);
             }
 
+        .avatar-container {
+            flex-shrink: 0;
+        }
+
         .avatar-img {
             width: 40px;
             height: 40px;
             border-radius: 50%;
             object-fit: cover;
+            background-color: #ddd;
             border: 1px solid rgba(0,0,0,0.04);
         }
 
         .avatar-fallback {
-            width: 40px;
-            height: 40px;
+            width: 32px;
+            height: 32px;
             border-radius: 50%;
             background-color: #8899a6;
             color: white;
@@ -199,11 +207,17 @@
             align-items: center;
             justify-content: center;
             font-weight: bold;
+            font-size: 14px;
         }
 
         .content {
             flex: 1;
             min-width: 0;
+        }
+
+        .user-info {
+            display: block;
+            margin-bottom: 4px;
         }
 
         .user-header-row {
@@ -215,15 +229,23 @@
 
         .user-name {
             font-weight: 700;
+            color: var(--text-main);
         }
 
         .user-screenname {
             display: block;
             color: var(--text-secondary);
+            font-weight: 400;
             font-size: 14px;
             text-decoration: none;
+            word-break: break-all;
             margin-top: 2px;
         }
+
+            .user-screenname:hover {
+                text-decoration: underline;
+                color: var(--accent-color);
+            }
 
         .tweet-time {
             color: var(--text-secondary);
@@ -255,11 +277,13 @@
             line-height: 22px;
             white-space: pre-wrap;
             word-break: break-word;
+            color: var(--text-main);
         }
 
         .more-link {
             color: var(--accent-color);
             text-decoration: none;
+            cursor: pointer;
             font-weight: 500;
         }
 
@@ -268,12 +292,18 @@
             border-radius: 12px;
             overflow: hidden;
             border: 1px solid var(--border-color);
+            background-color: #f8f9fa;
             max-width: 300px;
+            display: flex;
+            justify-content: center;
         }
 
         .tweet-media-img {
             width: 100%;
+            height: auto;
+            cursor: pointer;
             display: block;
+            object-fit: contain;
         }
 
         .attachments-list {
@@ -292,7 +322,23 @@
             border-radius: 12px;
             text-decoration: none;
             color: var(--text-main);
+            transition: background-color 0.2s;
             font-size: 14px;
+        }
+
+            .attachment-link:hover {
+                background-color: #e9ecef;
+            }
+
+        .attachment-icon {
+            font-size: 20px;
+        }
+
+        .attachment-title {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-weight: 500;
         }
 
         .due-container {
@@ -340,6 +386,7 @@
     <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
 
     <script>
+        // --- 設定 ---
         const CLIENT_ID = '509904198894-j2cmhttdj3ks7nvdnupasjliov7aj8a7.apps.googleusercontent.com';
         const SCOPES = [
             'https://www.googleapis.com/auth/classroom.courses.readonly',
@@ -356,14 +403,20 @@
         let allPosts = [];
         let globalUserMap = {};
         let isHomeworkOnly = false;
+        let gisInited = false;
 
         async function fetchFromProxy(endpoint, params = {}) {
             const searchParams = new URLSearchParams({ endpoint, ...params });
+            // プロキシ先のURLが正しいか確認してください（例: /api/classroom）
             const response = await fetch(`/api/classroom?${searchParams.toString()}`, {
                 headers: { 'Authorization': `Bearer ${accessToken}` }
             });
-            if (response.status === 401) { handleLogout(); throw new Error('Expired'); }
-            if (!response.ok) throw new Error('Failed');
+
+            if (response.status === 401) {
+                handleLogout();
+                throw new Error('Token expired');
+            }
+            if (!response.ok) throw new Error('API request failed');
             return await response.json();
         }
 
@@ -373,12 +426,18 @@
                 scope: SCOPES,
                 callback: '',
             });
-            if (accessToken) setTimeout(startApp, 100);
+            gisInited = true;
+
+            // ページ読み込み時にトークンがあれば自動開始
+            if (accessToken) {
+                // GISの初期化直後に叩くとエラーになることがあるため、一瞬待機
+                setTimeout(startApp, 100);
+            }
         }
 
         function handleAuthClick() {
             tokenClient.callback = async (resp) => {
-                if (resp.error) throw resp;
+                if (resp.error !== undefined) throw (resp);
                 accessToken = resp.access_token;
                 localStorage.setItem('google_access_token', accessToken);
                 startApp();
@@ -396,148 +455,216 @@
             document.getElementById('timeline').style.display = 'block';
             document.getElementById('search_box').style.display = 'flex';
             await loadTimeline();
-            if (!window.timer) window.timer = setInterval(updateCountdowns, 1000);
+            // カウントダウン開始
+            if (!window.countdownTimer) {
+                window.countdownTimer = setInterval(updateCountdowns, 1000);
+            }
+        }
+
+        // --- 以下、描画ロジック ---
+
+        function toggleHomeworkFilter() {
+            isHomeworkOnly = !isHomeworkOnly;
+            const btn = document.getElementById('homework_filter_btn');
+            btn.classList.toggle('active', isHomeworkOnly);
+            handleSearch();
+        }
+
+        let searchTimer;
+        function handleSearch() {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(() => {
+                const keyword = document.getElementById('keyword_input').value.toLowerCase();
+                const filteredPosts = allPosts.filter(post => {
+                    if (isHomeworkOnly && post.type !== '課題') return false;
+                    const user = globalUserMap[post.creatorUserId];
+                    const authorName = (user?.name?.fullName || '').toLowerCase();
+                    const text = (post.text || '').toLowerCase();
+                    const courseName = (post.courseName || '').toLowerCase();
+                    return text.includes(keyword) || authorName.includes(keyword) || courseName.includes(keyword);
+                });
+                renderPosts(filteredPosts, globalUserMap);
+            }, 300);
         }
 
         async function loadTimeline() {
             const timelineDiv = document.getElementById('timeline');
             timelineDiv.innerHTML = `<div class="loading"><div class="spinner"></div>投稿を取得中...</div>`;
             try {
-                // 1. コース一覧取得
-                const { courses = [] } = await fetchFromProxy('courses', { courseStates: 'ACTIVE' });
+                const coursesData = await fetchFromProxy('courses', { courseStates: 'ACTIVE', pageSize: 30 });
+                const courses = coursesData.courses || [];
 
-                // 2. お知らせと課題を全コース並列で取得（高速化）
-                const results = await Promise.all(courses.map(async (course) => {
+                const promises = courses.map(async (course) => {
                     try {
                         const [aRes, wRes] = await Promise.all([
-                            fetchFromProxy(`courses/${course.id}/announcements`, { pageSize: 10 }),
-                            fetchFromProxy(`courses/${course.id}/courseWork`, { pageSize: 10 })
+                            fetchFromProxy(`courses/${course.id}/announcements`, { pageSize: 20 }),
+                            fetchFromProxy(`courses/${course.id}/courseWork`, { pageSize: 20 })
                         ]);
 
                         const ann = (aRes.announcements || []).map(p => ({
-                            ...p, courseName: course.name, courseUrl: course.alternateLink, type: 'お知らせ'
+                            ...p, courseName: course.name, courseUrl: course.alternateLink, type: 'お知らせ', materials: p.materials || []
                         }));
 
-                        const wrk = await Promise.all((wRes.courseWork || []).map(async (p) => {
+                        const wrkPromises = (wRes.courseWork || []).map(async (p) => {
                             let status = 'NOT_SUBMITTED';
                             try {
                                 const subRes = await fetchFromProxy(`courses/${course.id}/courseWork/${p.id}/studentSubmissions`, { userId: 'me' });
-                                const state = subRes.studentSubmissions?.[0]?.state;
-                                status = (state === 'TURNED_IN' || state === 'RETURNED') ? 'SUBMITTED' : 'NOT_SUBMITTED';
+                                const submission = subRes.studentSubmissions?.[0];
+                                status = (submission?.state === 'TURNED_IN' || submission?.state === 'RETURNED') ? 'SUBMITTED' : 'NOT_SUBMITTED';
                             } catch (e) { }
 
                             let dueDate = null;
                             if (p.dueDate) {
                                 dueDate = new Date(p.dueDate.year, p.dueDate.month - 1, p.dueDate.day);
-                                dueDate.setHours(p.dueTime?.hours || 23, p.dueTime?.minutes || 59);
+                                if (p.dueTime) dueDate.setHours(p.dueTime.hours || 0, p.dueTime.minutes || 0, 0);
+                                else dueDate.setHours(23, 59, 59);
                             }
-                            return { ...p, text: p.description || p.title, courseName: course.name, courseUrl: course.alternateLink, type: '課題', submissionStatus: status, dueDate };
-                        }));
-                        return [...ann, ...wrk];
+                            return { ...p, text: p.description || p.title, courseName: course.name, courseUrl: course.alternateLink, type: '課題', materials: p.materials || [], submissionStatus: status, dueDate: dueDate };
+                        });
+                        const wrk = await Promise.all(wrkPromises);
+                        return ann.concat(wrk);
                     } catch (e) { return []; }
-                }));
+                });
 
-                allPosts = results.flat().sort((a, b) => new Date(b.creationTime) - new Date(a.creationTime));
+                const results = await Promise.all(promises);
+                allPosts = results.flat();
+                allPosts.sort((a, b) => new Date(b.creationTime) - new Date(a.creationTime));
 
-                // 3. プロフィール画像取得
-                const uids = [...new Set(allPosts.map(p => p.creatorUserId))];
-                await Promise.all(uids.map(async id => {
-                    try { globalUserMap[id] = await fetchFromProxy(`userProfiles/${id}`); }
-                    catch (e) { globalUserMap[id] = { name: { fullName: 'User' } }; }
-                }));
-
-                renderPosts(allPosts);
+                const userIds = [...new Set(allPosts.map(p => p.creatorUserId))];
+                globalUserMap = await fetchUserProfiles(userIds);
+                renderPosts(allPosts, globalUserMap);
             } catch (err) {
-                timelineDiv.innerHTML = `<div class="loading" style="color:red">読み込みエラー</div>`;
+                console.error(err);
+                if (err.message !== 'Token expired') {
+                    timelineDiv.innerHTML = `<div class="loading" style="color:red">読み込みエラーが発生しました。再読み込みしてください。</div>`;
+                }
             }
         }
 
-        function renderPosts(posts) {
+        async function fetchUserProfiles(userIds) {
+            const userMap = {};
+            await Promise.all(userIds.map(async (id) => {
+                try {
+                    const res = await fetchFromProxy(`userProfiles/${id}`);
+                    userMap[id] = res;
+                } catch (e) {
+                    userMap[id] = { name: { fullName: 'User' }, photoUrl: null };
+                }
+            }));
+            return userMap;
+        }
+
+        function renderPosts(posts, userMap) {
             const timelineDiv = document.getElementById('timeline');
-            timelineDiv.innerHTML = posts.map((post, i) => {
-                const user = globalUserMap[post.creatorUserId];
+            timelineDiv.innerHTML = '';
+            posts.forEach((post, i) => {
+                const user = userMap[post.creatorUserId];
                 const authorName = user?.name?.fullName || '先生';
-                const photoUrl = user?.photoUrl?.startsWith('http') ? user.photoUrl : null;
-                const avatar = photoUrl ? `<img src="${photoUrl}" class="avatar-img">` : `<div class="avatar-fallback">${authorName[0]}</div>`;
+                let photoUrl = user?.photoUrl ? (user.photoUrl.startsWith('http') ? user.photoUrl : 'https:' + user.photoUrl).replace('/s50/', '/s100/') : null;
+                const avatarHtml = photoUrl ? `<img src="${photoUrl}" class="avatar-img">` : `<div class="avatar-fallback">${authorName[0]}</div>`;
+                const textHtml = formatTweetText(post, i);
+                const attachmentsHtml = renderAttachments(post.materials);
 
-                const isSub = post.submissionStatus === 'SUBMITTED';
-                const badge = post.type === '課題' ? `<span class="type-badge ${isSub ? 'badge-homework-submitted' : 'badge-homework-not-submitted'}">${isSub ? '提出済' : '未提出'}</span>` : '';
-                const due = post.type === '課題' ? `<div class="due-container" id="due-${i}" data-post-idx="${allPosts.indexOf(post)}"></div>` : '';
+                let badgeHtml = '';
+                if (post.type === '課題') {
+                    const isSubmitted = post.submissionStatus === 'SUBMITTED';
+                    const badgeText = isSubmitted ? '提出済' : '未提出';
+                    const badgeClass = isSubmitted ? 'badge-homework-submitted' : 'badge-homework-not-submitted';
+                    badgeHtml = `<span class="type-badge ${badgeClass}">${badgeText}</span>`;
+                }
 
-                return `
-                        <div class="tweet" onclick="window.open('${post.alternateLink}', '_blank')">
-                            ${avatar}
-                            <div class="content">
-                                <div class="user-header-row">
-                                    <span class="user-name">${escapeHtml(authorName)}</span>
-                                    <span class="tweet-time">· ${formatDate(new Date(post.creationTime))}</span>
-                                    ${badge}
-                                </div>
-                                <a href="${post.courseUrl}" target="_blank" class="user-screenname" onclick="event.stopPropagation()">@${escapeHtml(post.courseName)}</a>
-                                <div class="tweet-text">${formatText(post, i)}</div>
-                                ${renderMedia(post.materials)}
-                                ${due}
-                            </div>
-                        </div>`;
-            }).join('');
+                let dueHtml = '';
+                if (post.type === '課題' && post.dueDate) {
+                    dueHtml = `<div class="due-container" id="due-${i}" data-post-index="${allPosts.indexOf(post)}"></div>`;
+                } else if (post.type === '課題' && !post.dueDate) {
+                    dueHtml = `<div class="due-container due-text-normal">期限なし</div>`;
+                }
+
+                const html = `
+                                <div class="tweet" onclick="window.open('${post.alternateLink}?authuser=0', '_blank')">
+                                    <div class="avatar-container">${avatarHtml}</div>
+                                    <div class="content">
+                                        <div class="user-info">
+                                            <div class="user-header-row">
+                                                <span class="user-name">${escapeHtml(authorName)}</span>
+                                                <span class="tweet-time">· ${formatDate(new Date(post.creationTime))}</span>
+                                                ${badgeHtml}
+                                            </div>
+                                            <a href="${post.courseUrl}?authuser=0" target="_blank" class="user-screenname" onclick="event.stopPropagation()">
+                                                @${escapeHtml(post.courseName)}
+                                            </a>
+                                        </div>
+                                        ${textHtml}
+                                        ${attachmentsHtml}
+                                        ${dueHtml}
+                                    </div>
+                                </div>`;
+                timelineDiv.innerHTML += html;
+            });
             updateCountdowns();
         }
 
         function updateCountdowns() {
-            document.querySelectorAll('.due-container[id^="due-"]').forEach(el => {
-                const post = allPosts[el.dataset.postIdx];
-                if (post.submissionStatus === 'SUBMITTED') return el.innerHTML = `<span class="due-submitted">提出済み</span>`;
-                if (!post.dueDate) return el.innerHTML = `<span class="due-text-normal">期限なし</span>`;
-
-                const diff = post.dueDate - new Date();
+            const containers = document.querySelectorAll('.due-container[id^="due-"]');
+            containers.forEach(el => {
+                const postIndex = el.getAttribute('data-post-index');
+                const post = allPosts[postIndex];
+                if (!post || post.submissionStatus === 'SUBMITTED') {
+                    el.innerHTML = `<span class="due-submitted">提出済み</span>`;
+                    return;
+                }
+                const now = new Date();
+                const diff = post.dueDate - now;
                 const isOver = diff < 0;
-                const abs = Math.abs(diff);
-                const color = (isOver || diff < 86400000) ? 'due-text-warning' : 'due-text-normal';
-
-                let s = isOver ? "期限切れ " : "期限まで ";
-                const d = Math.floor(abs / 86400000);
-                const h = Math.floor((abs % 86400000) / 3600000);
-                const m = Math.floor((abs % 3600000) / 60000);
-                const sec = Math.floor((abs % 60000) / 1000);
-                el.className = `due-container ${color}`;
-                el.innerText = s + (d > 0 ? d + "日" : "") + h + "時間" + m + "分" + sec + "秒";
+                const absDiff = Math.abs(diff);
+                const isUrgent = isOver || diff < (24 * 60 * 60 * 1000);
+                const colorClass = isUrgent ? 'due-text-warning' : 'due-text-normal';
+                let timeStr = "";
+                if (isOver) {
+                    const days = Math.floor(absDiff / (24 * 60 * 60 * 1000));
+                    timeStr = days >= 1 ? `期限切れ ${days}日` : `期限切れ ${Math.floor(absDiff / (60 * 1000))}分`;
+                } else {
+                    const d = Math.floor(diff / (24 * 60 * 60 * 1000));
+                    const h = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+                    const m = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
+                    const s = Math.floor((diff % (60 * 1000)) / 1000);
+                    timeStr = `期限まで ${d > 0 ? d + "日" : ""}${h}時間${m}分${s}秒`;
+                }
+                el.className = `due-container ${colorClass}`;
+                el.innerText = timeStr;
             });
         }
 
-        function renderMedia(materials = []) {
-            let img = '', file = '';
+        function renderAttachments(materials) {
+            if (!materials || materials.length === 0) return '';
+            let imagesHtml = '';
+            let filesHtml = '';
             materials.forEach(m => {
-                const f = m.driveFile?.driveFile;
-                if (!f) return;
-                const t = f.title.toLowerCase();
-                const thumb = f.thumbnailUrl ? f.thumbnailUrl.replace(/\/s\d+.*$/, '/s400') : '';
-                if (thumb && (t.endsWith('.jpg') || t.endsWith('.png') || t.endsWith('.jpeg'))) {
-                    img += `<div class="media-container"><img src="${thumb}" class="tweet-media-img" onclick="window.open('${f.alternateLink}','_blank');event.stopPropagation()"></div>`;
-                } else if (t.endsWith('.pdf')) {
-                    file += `<a href="${f.alternateLink}" target="_blank" class="attachment-link" onclick="event.stopPropagation()">📄 ${escapeHtml(f.title)}</a>`;
+                if (m.driveFile && m.driveFile.driveFile) {
+                    const file = m.driveFile.driveFile;
+                    const title = file.title.toLowerCase();
+                    const link = file.alternateLink;
+                    const thumbnailUrl = file.thumbnailUrl ? file.thumbnailUrl.replace(/\/s\d+.*$/, '/s400') : '';
+                    if (thumbnailUrl && (title.endsWith('.jpg') || title.endsWith('.jpeg') || title.endsWith('.png') || title.endsWith('.gif'))) {
+                        imagesHtml += `<div class="media-container"><img src="${thumbnailUrl}" class="tweet-media-img" onclick="window.open('${link}', '_blank');event.stopPropagation();"></div>`;
+                    } else if (title.endsWith('.pdf')) {
+                        filesHtml += `<a href="${link}" target="_blank" class="attachment-link" onclick="event.stopPropagation()"><span class="attachment-icon">📄</span><span class="attachment-title">${escapeHtml(file.title)}</span></a>`;
+                    }
                 }
             });
-            return img + (file ? `<div class="attachments-list">${file}</div>` : '');
+            return imagesHtml + (filesHtml ? `<div class="attachments-list">${filesHtml}</div>` : '');
         }
 
-        function formatText(post, i) {
-            const txt = post.text || "";
-            if (txt.length <= 140) return linkify(escapeHtml(txt));
+        function formatTweetText(post, i) {
+            const text = post.text || "";
+            const limit = 140;
             const id = `t-${i}`;
-            return `<span id="${id}-s">${linkify(escapeHtml(txt.substring(0, 140)))}... <a href="#" class="more-link" onclick="showMore(event,'${id}')">さらに表示</a></span><span id="${id}-f" style="display:none">${linkify(escapeHtml(txt))}</span>`;
+            if (text.length <= limit) return `<div class="tweet-text">${linkify(escapeHtml(text))}</div>`;
+            return `<div class="tweet-text" id="${id}-s">${linkify(escapeHtml(text.substring(0, limit)))}... <a href="#" class="more-link" onclick="showMore(event, '${id}')">さらに表示</a></div><div class="tweet-text" id="${id}-f" style="display:none;">${linkify(escapeHtml(text))}</div>`;
         }
-        window.showMore = (e, id) => { e.preventDefault(); e.stopPropagation(); document.getElementById(id + '-s').style.display = 'none'; document.getElementById(id + '-f').style.display = 'inline'; };
-        function handleSearch() {
-            const k = document.getElementById('keyword_input').value.toLowerCase();
-            renderPosts(allPosts.filter(p => {
-                if (isHomeworkOnly && p.type !== '課題') return false;
-                return (p.text || "").toLowerCase().includes(k) || p.courseName.toLowerCase().includes(k);
-            }));
-        }
-        function toggleHomeworkFilter() { isHomeworkOnly = !isHomeworkOnly; document.getElementById('homework_filter_btn').classList.toggle('active', isHomeworkOnly); handleSearch(); }
-        function formatDate(d) { const diff = (new Date() - d) / 1000; if (diff < 3600) return `${Math.floor(diff / 60)}分`; if (diff < 84000) return `${Math.floor(diff / 3600)}時間`; return `${d.getMonth() + 1}/${d.getDate()}`; }
+        window.showMore = (e, id) => { e.preventDefault(); e.stopPropagation(); document.getElementById(`${id}-s`).style.display = 'none'; document.getElementById(`${id}-f`).style.display = 'block'; };
+        function formatDate(d) { const diff = (new Date() - d) / 1000; if (diff < 3600) return `${Math.floor(diff / 60)}分`; if (diff < 86400) return `${Math.floor(diff / 3600)}時間`; return `${d.getMonth() + 1}月${d.getDate()}日`; }
         function escapeHtml(s) { return s.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": "&#039;" }[m])); }
         function linkify(s) { return s.replace(/(https?:\/\/[^\s]+)/g, url => `<a href="${url}" target="_blank" style="color:var(--accent-color);text-decoration:none;" onclick="event.stopPropagation()">${url}</a>`); }
     </script>
 </body>
-</html>
