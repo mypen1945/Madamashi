@@ -4,8 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Madamashi</title>
+
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Madamashi">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#ffffff">
+    <link rel="apple-touch-icon" href="icon.png">
+
     <style>
-        /* --- 既存スタイルは維持 --- */
         :root {
             --bg-color: #ffffff;
             --border-color: #eff3f4;
@@ -70,20 +77,21 @@
                 box-shadow: 0 0 0 1px var(--accent-color);
             }
 
-        /* 検索バー下のレイアウト */
+        /* ログアウトとフィルタボタンの行 */
         .header-bottom-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            padding: 0 4px;
         }
 
-        /* ログアウトボタン：目立たない薄い文字 */
         .logout-btn {
             font-size: 12px;
             color: var(--text-secondary);
             cursor: pointer;
             opacity: 0.6;
             transition: 0.2s;
+            user-select: none;
         }
 
             .logout-btn:hover {
@@ -167,7 +175,7 @@
             }
 
             100% {
-                transform: rotate(3600deg);
+                transform: rotate(360deg);
             }
         }
 
@@ -238,6 +246,7 @@
             font-weight: 400;
             font-size: 14px;
             text-decoration: none;
+            white-space: normal;
             word-break: break-all;
             margin-top: 2px;
         }
@@ -387,7 +396,7 @@
 
     <script>
         // --- 設定 ---
-        const CLIENT_ID = '509904198894-j2cmhttdj3ks7nvdnupasjliov7aj8a7.apps.googleusercontent.com';
+        const CLIENT_ID = '509904198894-j2cmhttdj3ks7nvdnupasjliov7aj8a7.apps.googleusercontent.com'; // あなたのクライアントIDを入れてください
         const SCOPES = [
             'https://www.googleapis.com/auth/classroom.courses.readonly',
             'https://www.googleapis.com/auth/classroom.announcements.readonly',
@@ -404,10 +413,11 @@
         let globalUserMap = {};
         let isHomeworkOnly = false;
         let gisInited = false;
+        let countdownInterval = null;
 
+        // Vercel上のプロキシ経由でAPIを実行
         async function fetchFromProxy(endpoint, params = {}) {
             const searchParams = new URLSearchParams({ endpoint, ...params });
-            // プロキシ先のURLが正しいか確認してください（例: /api/classroom）
             const response = await fetch(`/api/classroom?${searchParams.toString()}`, {
                 headers: { 'Authorization': `Bearer ${accessToken}` }
             });
@@ -428,9 +438,8 @@
             });
             gisInited = true;
 
-            // ページ読み込み時にトークンがあれば自動開始
             if (accessToken) {
-                // GISの初期化直後に叩くとエラーになることがあるため、一瞬待機
+                // GIS初期化後に安全に実行するため少し待機
                 setTimeout(startApp, 100);
             }
         }
@@ -455,13 +464,11 @@
             document.getElementById('timeline').style.display = 'block';
             document.getElementById('search_box').style.display = 'flex';
             await loadTimeline();
-            // カウントダウン開始
-            if (!window.countdownTimer) {
-                window.countdownTimer = setInterval(updateCountdowns, 1000);
+
+            if (!countdownInterval) {
+                countdownInterval = setInterval(updateCountdowns, 1000);
             }
         }
-
-        // --- 以下、描画ロジック ---
 
         function toggleHomeworkFilter() {
             isHomeworkOnly = !isHomeworkOnly;
@@ -581,24 +588,24 @@
                 }
 
                 const html = `
-                                <div class="tweet" onclick="window.open('${post.alternateLink}?authuser=0', '_blank')">
-                                    <div class="avatar-container">${avatarHtml}</div>
-                                    <div class="content">
-                                        <div class="user-info">
-                                            <div class="user-header-row">
-                                                <span class="user-name">${escapeHtml(authorName)}</span>
-                                                <span class="tweet-time">· ${formatDate(new Date(post.creationTime))}</span>
-                                                ${badgeHtml}
-                                            </div>
-                                            <a href="${post.courseUrl}?authuser=0" target="_blank" class="user-screenname" onclick="event.stopPropagation()">
-                                                @${escapeHtml(post.courseName)}
-                                            </a>
-                                        </div>
-                                        ${textHtml}
-                                        ${attachmentsHtml}
-                                        ${dueHtml}
+                        <div class="tweet" onclick="window.open('${post.alternateLink}?authuser=0', '_blank')">
+                            <div class="avatar-container">${avatarHtml}</div>
+                            <div class="content">
+                                <div class="user-info">
+                                    <div class="user-header-row">
+                                        <span class="user-name">${escapeHtml(authorName)}</span>
+                                        <span class="tweet-time">· ${formatDate(new Date(post.creationTime))}</span>
+                                        ${badgeHtml}
                                     </div>
-                                </div>`;
+                                    <a href="${post.courseUrl}?authuser=0" target="_blank" class="user-screenname" onclick="event.stopPropagation()">
+                                        @${escapeHtml(post.courseName)}
+                                    </a>
+                                </div>
+                                ${textHtml}
+                                ${attachmentsHtml}
+                                ${dueHtml}
+                            </div>
+                        </div>`;
                 timelineDiv.innerHTML += html;
             });
             updateCountdowns();
@@ -668,3 +675,4 @@
         function linkify(s) { return s.replace(/(https?:\/\/[^\s]+)/g, url => `<a href="${url}" target="_blank" style="color:var(--accent-color);text-decoration:none;" onclick="event.stopPropagation()">${url}</a>`); }
     </script>
 </body>
+</html>
