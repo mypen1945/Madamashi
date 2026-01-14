@@ -1,0 +1,32 @@
+export default async function handler(req, res) {
+  const API_KEY = process.env.GOOGLE_API_KEY;
+  
+  // URLSearchParamsを使って、警告の出ない安全な方法に変更
+  const { endpoint, ...otherParams } = req.query;
+  const searchParams = new URLSearchParams(otherParams);
+  searchParams.append('key', API_KEY);
+
+  const url = `https://classroom.googleapis.com/v1/${endpoint}?${searchParams.toString()}`;
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': req.headers.authorization, 
+        'Accept': 'application/json'
+      }
+    });
+
+    const data = await response.json();
+
+    // Google API側でエラーが返ってきた場合、その内容をログに出す
+    if (!response.ok) {
+      console.error("Google API Error:", data);
+      return res.status(response.status).json(data);
+    }
+
+    res.status(200).json(data);
+  } catch (error) {
+    console.error("Fetch Error:", error);
+    res.status(500).json({ error: 'Failed to fetch Classroom API' });
+  }
+}
