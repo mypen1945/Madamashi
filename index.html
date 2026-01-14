@@ -422,12 +422,20 @@
 
         async function loadTimeline() {
             const timelineDiv = document.getElementById('timeline');
+            // 読み込み中の表示
             timelineDiv.innerHTML = `<div class="loading"><div class="spinner"></div>投稿を取得中...</div>`;
+            
             try {
-                // コース一覧を取得
+                // 1. コース一覧を取得
                 const coursesData = await fetchFromProxy('courses', { courseStates: 'ACTIVE', pageSize: 30 });
                 const courses = coursesData.courses || [];
                 
+                // コースが一つもない場合
+                if (courses.length === 0) {
+                    timelineDiv.innerHTML = `<div class="loading">参加しているクラスが見つかりませんでした。</div>`;
+                    return;
+                }
+
                 const promises = courses.map(async (course) => {
                     try {
                         // お知らせと課題を取得
@@ -446,7 +454,9 @@
                                 const subRes = await fetchFromProxy(`courses/${course.id}/courseWork/${p.id}/studentSubmissions`, { userId: 'me' });
                                 const submission = subRes.studentSubmissions?.[0];
                                 status = (submission?.state === 'TURNED_IN' || submission?.state === 'RETURNED') ? 'SUBMITTED' : 'NOT_SUBMITTED';
-                            } catch (e) { }
+                            } catch (e) { 
+                                console.warn("提出状況の取得に失敗:", e);
+                            }
                             
                             let dueDate = null;
                             if (p.dueDate) {
@@ -458,19 +468,36 @@
                         });
                         const wrk = await Promise.all(wrkPromises);
                         return ann.concat(wrk);
-                    } catch (e) { return []; }
+                    } catch (e) { 
+                        console.error(`${course.name} のデータ取得に失敗:`, e);
+                        return []; 
+                    }
                 });
 
                 const results = await Promise.all(promises);
                 allPosts = results.flat();
+
+                // 2. 投稿が0件だった場合の処理（ここが重要！）
+                if (allPosts.length === 0) {
+                    timelineDiv.innerHTML = `<div class="loading">表示できる投稿はありません。</div>`;
+                    return;
+                }
+
+                // 日付順に並び替え
                 allPosts.sort((a, b) => new Date(b.creationTime) - new Date(a.creationTime));
                 
                 const userIds = [...new Set(allPosts.map(p => p.creatorUserId))];
                 globalUserMap = await fetchUserProfiles(userIds);
+                
+                // 画面に表示
                 renderPosts(allPosts, globalUserMap);
+
             } catch (err) {
-                console.error(err);
-                timelineDiv.innerHTML = `<div class="loading" style="color:red">読み込みエラーが発生しました</div>`;
+                console.error("全体エラー:", err);
+                timelineDiv.innerHTML = `<div class="loading" style="color:red">
+                    データの取得中にエラーが発生しました。<br>
+                    Google Cloudの権限設定（URLの許可）を確認してください。
+                </div>`;
             }
         }
 
